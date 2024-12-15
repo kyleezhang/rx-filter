@@ -1,0 +1,20 @@
+{
+  "name": "@rx-filter/vue",
+  "version": "0.0.1",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "dev": "tsup src/index.ts --format esm,cjs --watch",
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "test": "vitest run",
+    "lint": "eslint src --ext .ts,.tsx,.vue"
+  },
+  "dependencies": {
+    "@rx-filter/core": "workspace:*",
+    "vue": "^3.4.15"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.1"
+  }
+} 

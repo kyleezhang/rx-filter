@@ -1,0 +1,21 @@
+{
+  "name": "@rx-filter/react",
+  "version": "0.0.1",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "dev": "tsup src/index.ts --format esm,cjs --watch",
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "test": "vitest run",
+    "lint": "eslint src --ext .ts,.tsx"
+  },
+  "dependencies": {
+    "@rx-filter/core": "workspace:*",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.48",
+    "tsup": "^8.0.1"
+  }
+} 
