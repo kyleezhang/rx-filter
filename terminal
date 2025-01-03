@@ -1,9 +1,0 @@
-mkdir rx-filter
-cd rx-filter
-pnpm init 
-mkdir -p packages/core packages/vue packages/react docs
-pnpm install
-pnpm prepare
-chmod +x .husky/pre-commit
-chmod +x .husky/commit-msg
-pnpm dev
