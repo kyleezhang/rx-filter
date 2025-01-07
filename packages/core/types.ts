@@ -1,4 +1,17 @@
 import { RxFilterGroup } from './group'
+import { type BehaviorSubject, type Observable } from 'rxjs'
+
+export interface TRxFilterGroup<T extends Record<string, TFilterConfig<any, any, any>>> {
+  filterGroupStream: Observable<IFilterState<T>> | undefined
+  filterGroupValueStream: Observable<IFilterValue<T>> | undefined
+  filterKeys: string[]
+  init(): Promise<IFilterState<T>>
+  getFilterConfig<K extends keyof T>(key: K): T[K]
+  setFieldState(key: Extract<keyof T, string>, state: Partial<IFilterState<T>[typeof key]>): void
+  getFieldNode(
+    key: Extract<keyof T, string>
+  ): BehaviorSubject<IFilterState<T>[typeof key]> | undefined
+}
 
 /**
  * @cn 筛选字段状态
@@ -37,9 +50,9 @@ export type QueryTypeSchema =
  * @cn 联动响应函数，当 dependencies 状态发生变更时调用接口更新当前字段状态
  * @en Reaction function, when the dependencies state changes, the interface updates the current field state
  */
-export type TFilterReaction<V, P> = (
+export type TFilterReaction<P, V> = (
   dependciesValue: Record<string, TFilterFieldState>
-) => Partial<TFilterFieldState<V, P>> | Promise<Partial<TFilterFieldState<V, P>>>
+) => Partial<TFilterFieldState<P, V>> | Promise<Partial<TFilterFieldState<P, V>>>
 
 /**
  * @cn 筛选项配置
@@ -51,7 +64,7 @@ export type TFilterConfig<C, P, V> = {
    */
   name: string
   /**
-   * 筛选项是否展示，默认为true
+   * 筛选项是否展示，默认为 true
    */
   visible?: boolean
   /**
@@ -67,11 +80,11 @@ export type TFilterConfig<C, P, V> = {
    */
   queryKey?: string
   /**
-   * 筛选项同步到URL的方式，默认是 hash 模式
+   * 筛选项同步到 URL 的方式，默认是 hash 模式
    */
   queryMode?: 'hash' | 'query'
   /**
-   * 筛选项同步到 URL 的结构类型，如果没有声明 queryType 则不会同步到URL
+   * 筛选项同步到 URL 的结构类型，如果没有声明 queryType 则不会同步到 URL
    */
   queryType?: QueryTypeSchema
   /**
@@ -82,16 +95,13 @@ export type TFilterConfig<C, P, V> = {
    * 筛选字段初始值
    */
   initialValue?: V
-  /**
-   * 初始化值获取依赖项
-   */
+
+  /** 初始化值获取依赖项 */
   initialDependcies?: string[]
-  /**
-   * 初始值计算
-   */
+  /** 初始值计算 */
   initialQuery?: (
-    dependciesValue?: Record<string, TFilterFieldState>
-  ) => Partial<TFilterFieldState<V, P>> | Promise<Partial<TFilterFieldState<V, P>>> // 获取组件初始状态
+    dependciesValue: Record<string, TFilterFieldState>
+  ) => Partial<TFilterFieldState<P, V>> | Promise<Partial<TFilterFieldState<P, V>>>
 } & (
   | {
       /**
@@ -101,7 +111,7 @@ export type TFilterConfig<C, P, V> = {
       /**
        * 联动逻辑
        */
-      reaction: TFilterReaction<V, P> | TFilterReaction<V, P>[]
+      reaction: TFilterReaction<P, V> | TFilterReaction<P, V>[]
     }
   | {
       dependencies?: never
@@ -109,6 +119,7 @@ export type TFilterConfig<C, P, V> = {
     }
 )
 
+// ========== type utils ==========
 export type IFilterState<T extends Record<string, TFilterConfig<any, any, any>>> = {
   [K in keyof T]: T[K] extends TFilterConfig<any, infer P, infer V>
     ? TFilterFieldState<P, V>
@@ -119,10 +130,6 @@ export type IFilterValue<T extends Record<string, TFilterConfig<any, any, any>>>
   [K in keyof T]: T[K] extends TFilterConfig<any, any, infer V> ? V : never
 }
 
-/** 任意 AnyRxFilterGroup => 作为 extends 目标好用 */
-export type AnyRxFilterGroup = RxFilterGroup<Record<string, TFilterConfig<any, any, any>>>
-
-// ========== type utils ==========
 export type GetGroupConfig<G> = G extends RxFilterGroup<infer ConfigMap> ? ConfigMap : undefined
 
 export type GetConfig<K extends string, T extends TFilterConfig<any, any, any>[]> = T extends [
@@ -137,3 +144,6 @@ export type GetConfig<K extends string, T extends TFilterConfig<any, any, any>[]
 export type FilterConfigArrayToMap<T extends TFilterConfig<any, any, any>[]> = {
   [K in T[number]['name']]: GetConfig<K, T>
 }
+
+/** 任意 AnyRxFilterGroup => 作为 extends 目标好用 */
+export type AnyRxFilterGroup = TRxFilterGroup<Record<string, TFilterConfig<any, any, any>>>

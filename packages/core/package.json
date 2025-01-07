@@ -8,6 +8,8 @@
     "dev": "tsup src/index.ts --format esm,cjs --watch",
     "build": "tsup src/index.ts --format esm,cjs --dts",
     "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint src --ext .ts,.tsx"
   },
   "dependencies": {

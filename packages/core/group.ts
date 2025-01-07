@@ -11,6 +11,7 @@ import {
 } from 'rxjs'
 import { skip, distinctUntilChanged, map, switchMap, mergeMap } from 'rxjs/operators'
 import {
+  TRxFilterGroup,
   TFilterConfig,
   TFilterGroupOptions,
   TFilterReaction,
@@ -20,16 +21,18 @@ import {
 } from './types'
 import { UrlStateGroup } from './query'
 import { RxInitialFilterGroup } from './initial'
-import { mapValues } from 'lodash-es'
+import { mapValues, isEqual } from 'lodash-es'
 
-export class RxFilterGroup<T extends Record<string, TFilterConfig<any, any, any>>> {
+export class RxFilterGroup<T extends Record<string, TFilterConfig<any, any, any>>>
+  implements TRxFilterGroup<T>
+{
   private configMap: T
   private nodeMap: Partial<{
     [K in keyof T]: BehaviorSubject<IFilterState<T>[K]>
   }> = {}
   private urlState: UrlStateGroup
   private finalStream$: Observable<IFilterState<T>> | undefined
-  private finalValueStream$: Observable<Record<string, IFilterValue<T>>> | undefined
+  private finalValueStream$: Observable<IFilterValue<T>> | undefined
   private loading = false
   private initPromise: Promise<Awaited<ReturnType<RxFilterGroup<any>['init']>>> | undefined
   private subscriptions: Set<ReturnType<Observable<any>['subscribe']>> = new Set()
@@ -45,7 +48,7 @@ export class RxFilterGroup<T extends Record<string, TFilterConfig<any, any, any>
     return this.finalStream$
   }
 
-  get filterGroupValueStream(): Observable<Record<string, IFilterValue<T>>> | undefined {
+  get filterGroupValueStream(): Observable<IFilterValue<T>> | undefined {
     return this.finalValueStream$
   }
 
@@ -187,7 +190,7 @@ export class RxFilterGroup<T extends Record<string, TFilterConfig<any, any, any>
       }
     ).pipe(
       map((values) => values as unknown as IFilterState<T>),
-      distinctUntilChanged()
+      distinctUntilChanged((prev, curr) => isEqual(prev, curr))
     )
 
     this.finalValueStream$ = combineLatest(
@@ -203,9 +206,9 @@ export class RxFilterGroup<T extends Record<string, TFilterConfig<any, any, any>
               [key]: state.value, // 提取每个筛选字段中的value字段
             }),
             {}
-          ) as Record<string, IFilterValue<T>>
+          ) as IFilterValue<T>
       ),
-      distinctUntilChanged()
+      distinctUntilChanged((prev, curr) => isEqual(prev, curr))
     )
 
     const subscription = this.finalStream$.subscribe((values) => {
@@ -279,16 +282,18 @@ export class RxFilterGroup<T extends Record<string, TFilterConfig<any, any, any>
 
 /** 原始 RxFilterGroup 工厂方法 */
 export const createRxFilterGroup = <T extends Record<string, TFilterConfig<any, any, any>>>(
-  configMap: T
-): RxFilterGroup<T> => new RxFilterGroup(configMap)
+  configMap: T,
+  options?: TFilterGroupOptions
+): RxFilterGroup<T> => new RxFilterGroup(configMap, options)
 
 /** 支持 Array 创建 RxFilterGroup */
 export const createRxFilterGroupByArray = <T extends TFilterConfig<any, any, any>[]>(
-  configs: T
+  configs: T,
+  options?: TFilterGroupOptions
 ): RxFilterGroup<FilterConfigArrayToMap<T>> => {
   const configMap: Record<string, TFilterConfig<any, any, any>> = {}
   for (const config of configs) {
     configMap[config.name] = config
   }
-  return new RxFilterGroup(configMap as FilterConfigArrayToMap<T>)
+  return new RxFilterGroup(configMap as FilterConfigArrayToMap<T>, options)
 }

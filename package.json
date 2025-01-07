@@ -6,6 +6,8 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "test": "turbo run test",
+    "test:watch": "turbo run test:watch",
+    "test:coverage": "turbo run test:coverage",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "prepare": "husky install"
@@ -22,7 +24,9 @@
     "prettier": "^3.2.5",
     "turbo": "^1.12.2",
     "typescript": "^5.3.3",
-    "vitest": "^1.2.2"
+    "vitest": "^1.2.2",
+    "@vue/test-utils": "^2.4.4",
+    "jsdom": "^24.0.0"
   },
   "packageManager": "pnpm@8.9.0",
   "engines": {

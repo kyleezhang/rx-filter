@@ -1,6 +1,6 @@
 import { BehaviorSubject, Observable, combineLatest, from, of, forkJoin } from 'rxjs'
 import { switchMap, timeout, catchError, take } from 'rxjs/operators'
-import { TFilterConfig, TFilterFieldState, IFilterState } from './types'
+import { TFilterConfig, IFilterState } from './types'
 import { UrlStateGroup } from './query'
 import { merge } from 'lodash-es'
 
@@ -62,10 +62,10 @@ export class RxInitialFilterGroup<T extends Record<string, TFilterConfig<any, an
     key: keyof T,
     fieldState: IFilterState<T>[typeof key],
     dependenciesValue?: Record<string, IFilterState<T>[typeof key]>
-  ) {
+  ): Observable<IFilterState<T>[typeof key]> {
     const config = this.configMap[key]
     return from(
-      new Promise<TFilterFieldState>((resolve) => {
+      new Promise<IFilterState<T>[typeof key]>((resolve) => {
         const result = config.initialQuery && config.initialQuery(dependenciesValue)
         if (result instanceof Promise) {
           result.then((res) => resolve(merge(fieldState, res)))

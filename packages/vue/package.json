@@ -8,13 +8,22 @@
     "dev": "tsup src/index.ts --format esm,cjs --watch",
     "build": "tsup src/index.ts --format esm,cjs --dts",
     "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint src --ext .ts,.tsx,.vue"
   },
   "dependencies": {
     "@rx-filter/core": "workspace:*",
+    "lodash-es": "^4.17.21",
+    "rxjs": "^7.8.1",
     "vue": "^3.4.15"
   },
   "devDependencies": {
     "tsup": "^8.0.1"
+  },
+  "peerDependencies": {
+    "lodash-es": "*",
+    "rxjs": ">=7.0.0",
+    "vue": ">3.0.0"
   }
-} 
+}
