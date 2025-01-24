@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/consistent-type-assertions */
 import { BehaviorSubject, Observable, combineLatest, from, of, forkJoin } from 'rxjs'
-import { switchMap, timeout, catchError, take } from 'rxjs/operators'
+import { switchMap, timeout, catchError, take, debounceTime } from 'rxjs/operators'
 import { TFilterConfig, IFilterState } from './types'
 import { UrlStateGroup } from './query'
 import { merge } from 'lodash-es'
@@ -7,23 +8,24 @@ import { merge } from 'lodash-es'
 // 请求超时配置
 const TIME_STAMP = 2000
 
-export class RxInitialFilterGroup<T extends Record<string, TFilterConfig<any, any, any>>> {
+export class RxInitialFilterGroup<T extends Record<string, TFilterConfig<string, any, any, any>>> {
   private configMap: T
-  private nodeMap: Partial<{ [K in keyof T]: Observable<IFilterState<T>[K]> }> = {}
+  private nodeMap: Partial<{ [K in Extract<keyof T, string>]: Observable<IFilterState<T>[K]> }> = {}
   private initialStram$: Observable<IFilterState<T>>
   private urlState: UrlStateGroup
 
   constructor(configMap: T, urlState: UrlStateGroup) {
     this.configMap = configMap
     this.urlState = urlState
-    const nodeMapEntries = Object.entries(configMap).reduce<{
-      [K in keyof T]: Observable<IFilterState<T>[K]>
-    }>(
-      (acc, [key]) => {
-        acc[key as keyof T] = this.initialFieldState(key as Extract<keyof T, string>)
+    const nodeMapEntries = Object.keys(configMap).reduce(
+      (acc, key) => {
+        // 将 key 明确为字符串类型后再强制转换为合法的 keyof T 类型
+        acc[key as Extract<keyof T, string>] = this.initialFieldState(
+          key as Extract<keyof T, string>
+        )
         return acc
       },
-      {} as { [K in keyof T]: Observable<IFilterState<T>[K]> }
+      {} as { [K in Extract<keyof T, string>]: Observable<IFilterState<T>[K]> }
     )
     this.initialStram$ = forkJoin(nodeMapEntries) as Observable<IFilterState<T>>
   }
@@ -32,7 +34,7 @@ export class RxInitialFilterGroup<T extends Record<string, TFilterConfig<any, an
     return this.initialStram$
   }
 
-  private getInitialValue(key: keyof T) {
+  private getInitialValue(key: Extract<keyof T, string>) {
     const config = this.configMap[key]
     const queryValue = this.urlState.getQueryValue(key as Extract<keyof T, string>)
     const storageValue = config.isSaveStorage
@@ -42,24 +44,26 @@ export class RxInitialFilterGroup<T extends Record<string, TFilterConfig<any, an
   }
 
   private resolveDependencies(
-    key: keyof T
+    key: Extract<keyof T, string>
   ): Record<string, Observable<IFilterState<T>[typeof key]>> {
     const config = this.configMap[key]
-    const dependencies = config.initialDependcies ?? []
+    const dependencies = (config.initialDependcies ?? []) as Extract<keyof T, string>[]
     if (dependencies.length === 0) {
       return {} as Record<string, Observable<IFilterState<T>[typeof key]>>
     }
-    return dependencies.reduce<Record<string, Observable<IFilterState<T>[typeof key]>>>(
+    return dependencies.reduce<
+      Record<Extract<keyof T, string>, Observable<IFilterState<T>[typeof key]>>
+    >(
       (prev, cur) => ({
         ...prev,
         [cur]: this.nodeMap[cur] || this.initialFieldState(cur),
       }),
-      {}
+      {} as Record<Extract<keyof T, string>, Observable<IFilterState<T>[typeof key]>>
     )
   }
 
   private createAsyncNode(
-    key: keyof T,
+    key: Extract<keyof T, string>,
     fieldState: IFilterState<T>[typeof key],
     dependenciesValue?: Record<string, IFilterState<T>[typeof key]>
   ): Observable<IFilterState<T>[typeof key]> {
@@ -82,7 +86,9 @@ export class RxInitialFilterGroup<T extends Record<string, TFilterConfig<any, an
     )
   }
 
-  private initialFieldState(key: keyof T): Observable<IFilterState<T>[typeof key]> {
+  private initialFieldState(
+    key: Extract<keyof T, string>
+  ): Observable<IFilterState<T>[typeof key]> {
     if (this.nodeMap[key]) {
       return this.nodeMap[key]
     }
@@ -94,11 +100,10 @@ export class RxInitialFilterGroup<T extends Record<string, TFilterConfig<any, an
       loading: false,
       value: value ?? config.initialValue,
       componentProps: config.componentProps,
-    } as IFilterState<T>[typeof key]
+    } as unknown as IFilterState<T>[typeof key]
 
-    // 如果从 url 或 storage 获取到 value 或者没有异步查询，则立即返回同步节点
-    if (value || !config.initialQuery) {
-      const subject = new BehaviorSubject(fieldState)
+    if (!config.initialQuery) {
+      const subject = new BehaviorSubject(fieldState).pipe(take(1))
       this.nodeMap[key] = subject
       return subject
     }
@@ -108,6 +113,7 @@ export class RxInitialFilterGroup<T extends Record<string, TFilterConfig<any, an
     const node =
       Object.keys(dependenciesNode).length > 0
         ? combineLatest(dependenciesNode).pipe(
+            debounceTime(100),
             switchMap((dependenciesValue) =>
               this.createAsyncNode(key, fieldState, dependenciesValue)
             ),

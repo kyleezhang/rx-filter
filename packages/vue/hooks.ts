@@ -1,22 +1,17 @@
-import { mapValues } from 'lodash-es'
-import { computed, onBeforeUnmount, ref, Ref } from 'vue'
+/* eslint-disable @typescript-eslint/consistent-type-assertions */
+import { pick, mapValues } from 'lodash-es'
+import { computed, ComputedRef, onBeforeUnmount, ref } from 'vue'
 import { filter, debounceTime } from 'rxjs/operators'
 import {
   createRxFilterGroupByArray,
-  type TRxFilterGroup,
+  RxFilterGroup,
   type IFilterState,
   type TFilterGroupOptions,
-  type AnyRxFilterGroup,
   IFilterValue,
 } from '@rx-filter/core'
-import { TFilterConfig } from './types'
+import { type TFilterConfigVue, type IUseFiltersState, type IUseFiltersValue } from './types'
 
-type IGroupState = {
-  state: Ref<IFilterState<Record<string, TFilterConfig<any>>> | undefined>
-  value: Ref<IFilterValue<Record<string, TFilterConfig<any>>> | undefined>
-}
-
-export const getFilterGroup = <T extends TFilterConfig<any>[]>(
+export const getFilterGroup = <T extends TFilterConfigVue<string, any>[]>(
   configs: T,
   options?: TFilterGroupOptions
 ) => {
@@ -28,55 +23,9 @@ export const getFilterGroup = <T extends TFilterConfig<any>[]>(
   return group
 }
 
-// 用于缓存 group 与 state 的映射关系
-const groupStateCache = new WeakMap<AnyRxFilterGroup, IGroupState>()
-
-function useGroupState<T extends Record<string, TFilterConfig<any>>>(
-  group: TRxFilterGroup<T>
-): IGroupState {
-  // 检查缓存
-  if (groupStateCache.has(group as AnyRxFilterGroup)) {
-    return groupStateCache.get(group as AnyRxFilterGroup)!
-  }
-  const state = ref<IFilterState<T>>()
-  const value = ref<IFilterValue<T>>()
-  groupStateCache.set(group as AnyRxFilterGroup, { state, value })
-
-  group.init().then((initialState) => {
-    if (!group.filterGroupStream || !group.filterGroupValueStream) {
-      return {}
-    }
-
-    const stateSubscription = group.filterGroupStream
-      .pipe(
-        filter((v) => Object.values(v).every((item) => !item.loading)),
-        debounceTime(400)
-      )
-      .subscribe((updatedState) => {
-        state.value = updatedState
-      })
-
-    const valueSubscription = group.filterGroupValueStream.subscribe((updatedValue) => {
-      value.value = updatedValue
-    })
-
-    onBeforeUnmount(() => {
-      stateSubscription.unsubscribe()
-      valueSubscription.unsubscribe()
-    })
-
-    if (!state.value) {
-      state.value = initialState // 初始化状态
-      value.value = mapValues(initialState.value, (v) =>
-        v?.loading || !v?.visible ? undefined : v.value
-      )
-    }
-  })
-
-  return { state, value }
-}
-
-function setFieldNodeState<T extends Record<string, TFilterConfig<any>>>(group: TRxFilterGroup<T>) {
+function setFieldNodeState<T extends Record<string, TFilterConfigVue<string, any>>>(
+  group: RxFilterGroup<T>
+) {
   return (name: Extract<keyof T, string>, state: Partial<IFilterState<T>[typeof name]>) => {
     group.setFieldState(name, state)
   }
@@ -89,23 +38,42 @@ function setFieldNodeState<T extends Record<string, TFilterConfig<any>>>(group: 
  * @returns 筛选字段所有状态
  */
 export function useFilters<
-  T extends Record<string, TFilterConfig<any>>,
+  T extends Record<string, TFilterConfigVue<string, any>>,
   K extends Extract<keyof T, string> | undefined,
->(group: TRxFilterGroup<T>, name?: K | K[]) {
-  const { state } = useGroupState(group)
+>(
+  group: RxFilterGroup<T>,
+  name?: K | K[]
+): {
+  state: ComputedRef<IUseFiltersState<T, K> | undefined>
+  setFieldState: (
+    name: Extract<keyof T, string>,
+    state: Partial<IFilterState<T>[typeof name]>
+  ) => void
+} {
+  const state = ref<IFilterState<T>>()
+
+  group.init().then((initialState) => {
+    if (!group.filterGroupStream) {
+      state.value = initialState
+    } else {
+      group.filterGroupStream
+        .pipe(
+          filter((v) => Object.values(v).every((item) => !item.loading)),
+          debounceTime(200)
+        )
+        .subscribe((v) => {
+          state.value = v
+        })
+    }
+  })
 
   const filteredState = computed(() => {
-    if (!state.value) {
-      return {} as { [K in keyof T]: IFilterState<T>[K] }
-    }
     if (!name) {
-      return state.value
+      return state.value as IUseFiltersState<T, K>
     }
 
     const names = Array.isArray(name) ? name : [name]
-    return Object.fromEntries(
-      Object.entries(state.value).filter(([key]) => names.includes(key as K))
-    ) as { [K in keyof T]: IFilterState<T>[K] }
+    return pick(state.value, names as Extract<keyof T, string>[]) as IUseFiltersState<T, K>
   })
 
   return {
@@ -121,27 +89,41 @@ export function useFilters<
  * @returns 筛选字段值
  */
 export function useFiltersValue<
-  T extends Record<string, TFilterConfig<any>>,
+  T extends Record<string, TFilterConfigVue<string, any>>,
   K extends Extract<keyof T, string> | undefined,
->(group: TRxFilterGroup<T>, name?: K | K[]) {
-  const { value } = useGroupState(group)
-  const filteredValue = computed(() => {
-    if (!value.value) {
-      return {} as IFilterValue<T>
+>(
+  group: RxFilterGroup<T>,
+  name?: K | K[]
+): {
+  values: ComputedRef<IUseFiltersValue<T, K> | undefined>
+  setFieldState: (
+    name: Extract<keyof T, string>,
+    state: Partial<IFilterState<T>[typeof name]>
+  ) => void
+} {
+  const values = ref<IFilterValue<T>>()
+  group.init().then((v) => {
+    if (!group.filterGroupValueStream) {
+      values.value = mapValues(v, (item) => item.value) as IFilterValue<T>
+    } else {
+      group.filterGroupValueStream.subscribe((v) => {
+        values.value = v
+      })
     }
+  })
+
+  const filteredValue = computed(() => {
     if (!name) {
-      return value
+      return values.value as IUseFiltersValue<T, K>
     }
 
     const names = Array.isArray(name) ? name : [name]
 
-    return Object.fromEntries(
-      Object.entries(value.value).filter(([key]) => names.includes(key as K))
-    ) as { [K in keyof T]: IFilterState<T>[K] }
+    return pick(values.value, names as Extract<keyof T, string>[]) as IUseFiltersValue<T, K>
   })
 
   return {
-    value: filteredValue,
+    values: filteredValue,
     setFieldState: setFieldNodeState(group),
   }
 }
@@ -153,10 +135,10 @@ export function useFiltersValue<
  * @returns 筛选字段对应节点
  */
 export function useFieldState<
-  T extends Record<string, TFilterConfig<any>>,
+  T extends Record<string, TFilterConfigVue<string, any>>,
   K extends Extract<keyof T, string>,
->(group: TRxFilterGroup<T>, name: K) {
-  const state = ref<IFilterState<T>[typeof name]>()
+>(group: RxFilterGroup<T>, name: K) {
+  const state = ref<IFilterState<T>[K]>()
 
   group.init().then((initialState) => {
     if (initialState) {
@@ -166,7 +148,7 @@ export function useFieldState<
         const subscription = node.subscribe((v) => {
           state.value = {
             ...v,
-          }
+          } as unknown as IFilterState<T>[K]
         })
 
         onBeforeUnmount(() => {

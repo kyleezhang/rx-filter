@@ -22,7 +22,7 @@ describe('RxFilterGroup', () => {
   })
 
   it('should create group with config map', async () => {
-    const config: Record<string, TFilterConfig<any, any, any>> = {
+    const config: Record<string, TFilterConfig<string, any, any, any>> = {
       test: {
         name: 'test',
         component: 'input',
@@ -44,7 +44,7 @@ describe('RxFilterGroup', () => {
         componentProps: {},
         visible: true,
       },
-    ] as const
+    ]
 
     const group = createRxFilterGroupByArray(configs)
     expect(group).toBeDefined()

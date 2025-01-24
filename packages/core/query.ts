@@ -1,5 +1,4 @@
 import { QueryTypeSchema, TFilterConfig } from './types'
-import { pickBy } from 'lodash-es'
 import { z } from 'zod'
 import qs from 'qs'
 
@@ -8,39 +7,27 @@ function parseSchema(description: QueryTypeSchema): z.ZodTypeAny {
   switch (description.type) {
     case 'number': {
       let schema: z.ZodTypeAny = z.number()
-      if (description.nullable) {
-        schema = schema.nullable()
-      }
-      if (description.optional) {
-        schema = schema.optional()
-      }
+      if (description.nullable) schema = schema.nullable()
+      if (description.optional) schema = schema.optional()
       return schema
     }
     case 'string': {
       let schema: z.ZodTypeAny = z.string()
-      if (description.nullable) {
-        schema = schema.nullable()
-      }
-      if (description.optional) {
-        schema = schema.optional()
-      }
+      if (description.nullable) schema = schema.nullable()
+      if (description.optional) schema = schema.optional()
       return schema
     }
     case 'boolean': {
       let schema: z.ZodTypeAny = z.boolean()
-      if (description.nullable) {
-        schema = schema.nullable()
-      }
-      if (description.optional) {
-        schema = schema.optional()
-      }
+      if (description.nullable) schema = schema.nullable()
+      if (description.optional) schema = schema.optional()
       return schema
     }
     case 'array': {
-      return z.array(parseSchema(description.items))
+      return z.array(parseSchema(description.items!))
     }
     case 'object': {
-      const properties = Object.entries(description.properties).reduce(
+      const properties = Object.entries(description.properties!).reduce(
         (acc, [key, value]) => ({
           ...acc,
           [key]: parseSchema(value),
@@ -48,12 +35,8 @@ function parseSchema(description: QueryTypeSchema): z.ZodTypeAny {
         {}
       )
       let schema: z.ZodTypeAny = z.object(properties)
-      if (description.nullable) {
-        schema = schema.nullable()
-      }
-      if (description.optional) {
-        schema = schema.optional()
-      }
+      if (description.nullable) schema = schema.nullable()
+      if (description.optional) schema = schema.optional()
       return schema
     }
     default:
@@ -69,38 +52,27 @@ export class UrlStateGroup {
     mode: 'hash' | 'query'
     type: QueryTypeSchema
     schema: z.ZodTypeAny
-  }> = [] // 保存页面内所有筛选项的query配置信息
+  }> = []
 
   constructor() {
     this.queryStr = (location.search || '').substring(1)
     this.hashStr = window.location.hash ?? ''
   }
 
-  private setQuery(queryValue: Record<string, unknown>) {
+  private setUrl(queryValue: Record<string, unknown>, hashValue: Record<string, unknown>) {
     const currentQuery = qs.parse(window.location.search, { ignoreQueryPrefix: true })
-    const newQuery = {
-      ...currentQuery,
-      ...queryValue,
-    }
-    // 序列化为新的 query string
-    const newQueryString = qs.stringify(newQuery, { addQueryPrefix: true }) // 自动添加 `?`
+    const newQuery = { ...currentQuery, ...queryValue }
+    const newQueryString = qs.stringify(newQuery, { addQueryPrefix: true })
 
-    // 更新 URL
-    const newUrl = `${window.location.pathname}${newQueryString}${window.location.hash}`
+    const currentHash = qs.parse(window.location.hash.slice(1))
+    const newHash = { ...currentHash, ...hashValue }
+    const newHashString = qs.stringify(newHash)
+
+    const newUrl = `${window.location.pathname}${newQueryString}#${newHashString}`
     window.history.replaceState({}, '', newUrl)
   }
 
-  private setHash(hashValue: Record<string, unknown>) {
-    const currentHash = qs.parse(window.location.hash.slice(1))
-    const newHash = {
-      ...currentHash,
-      ...hashValue,
-    }
-    const newHashString = qs.stringify(newHash)
-    window.history.replaceState({}, '', `${location.href.split('#')[0]}#${newHashString}`)
-  }
-
-  init<T extends TFilterConfig<any, any, any>[]>(configs: T) {
+  init<T extends TFilterConfig<string, any, any, any>[]>(configs: T) {
     this.queryItems = configs
       .filter((config) => config.queryType)
       .map((config) => ({
@@ -115,31 +87,34 @@ export class UrlStateGroup {
     this.queryStr = (window.location.search || '').substring(1)
     this.hashStr = window.location.hash ?? ''
     const item = this.queryItems.find((e) => e.key === name)
-    if (!item) {
-      return undefined
-    }
+    if (!item) return undefined
+
     try {
-      if (item?.mode === 'hash') {
-        return item.schema.parse(qs.parse(this.queryStr)[item.key])
-      } else {
-        return item?.schema.parse(qs.parse(this.hashStr.substring(1))[item.key])
-      }
+      const value =
+        item.mode === 'query'
+          ? qs.parse(this.queryStr)[item.key]
+          : qs.parse(this.hashStr.substring(1))[item.key]
+      if (value === undefined) return undefined
+      return item.schema.parse(item.type.type === 'number' ? Number(value) : value)
     } catch (err) {
       console.error('QueryError:', name, err)
+      return undefined
     }
   }
 
   setQueryValues<T extends Record<string, unknown>>(values: T) {
-    const queryValue = pickBy(values, (v, k) => {
-      const item = this.queryItems.find((e) => e.key === k)
-      return item?.mode === 'query'
-    })
-    this.setQuery(queryValue)
+    const queryValue: Record<string, unknown> = {}
+    const hashValue: Record<string, unknown> = {}
 
-    const hashValue = pickBy(values, (v, k) => {
+    Object.entries(values).forEach(([k, v]) => {
       const item = this.queryItems.find((e) => e.key === k)
-      return item?.mode === 'hash'
+      if (item?.mode === 'query') {
+        queryValue[k] = v
+      } else if (item?.mode === 'hash') {
+        hashValue[k] = v
+      }
     })
-    this.setHash(hashValue)
+
+    this.setUrl(queryValue, hashValue)
   }
 }
